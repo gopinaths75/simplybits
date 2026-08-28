@@ -28,7 +28,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-// #define SCREEN_WIDTH 128 // OLED display width, in pixels
+// #define SCREEN_WIDTH  128 // OLED display width, in pixels
 // #define SCREEN_HEIGHT 64
 /* USER CODE END Includes */
 

@@ -55,7 +55,57 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
+typedef struct {
+    uint8_t seconds;
+    uint8_t minutes;
+    uint8_t hours;
+    uint8_t dayofweek;
+    uint8_t dayofmonth;
+    uint8_t month;
+    uint8_t year;
+} RTC_Time;
 
+RTC_Time myTime;
+#define DS3231_ADDRESS 0xD0
+
+
+uint8_t decToBcd(uint8_t val) {
+  return ( (val/10*16) + (val%10) );
+}
+
+// Convert binary coded decimal to normal decimal numbers
+uint8_t bcdToDec(uint8_t val) {
+  return ( (val/16*10) + (val%16) );
+}
+
+void DS3231_SetTime(uint8_t sec, uint8_t min, uint8_t hour, uint8_t dow, uint8_t dom, uint8_t month, uint8_t year) {
+    uint8_t set_time[7];
+    set_time[0] = decToBcd(sec);
+    set_time[1] = decToBcd(min);
+    set_time[2] = decToBcd(hour); // Assumes 24-hour mode
+    set_time[3] = decToBcd(dow);
+    set_time[4] = decToBcd(dom);
+    set_time[5] = decToBcd(month);
+    set_time[6] = decToBcd(year);
+
+    // Write 7 bytes starting at register 0x00 (Seconds register)
+    HAL_I2C_Mem_Write(&hi2c1, DS3231_ADDRESS, 0x00, I2C_MEMADD_SIZE_8BIT, set_time, 7, 1000);
+}
+
+void DS3231_GetTime(RTC_Time *time) {
+    uint8_t get_time[7];
+    
+    // Read 7 bytes starting at register 0x00
+    HAL_I2C_Mem_Read(&hi2c1, DS3231_ADDRESS, 0x00, I2C_MEMADD_SIZE_8BIT, get_time, 7, 1000);
+
+    time->seconds    = bcdToDec(get_time[0]);
+    time->minutes    = bcdToDec(get_time[1]);
+    time->hours      = bcdToDec(get_time[2] & 0x3F); // Masking for 24-hour mode
+    time->dayofweek  = bcdToDec(get_time[3]);
+    time->dayofmonth = bcdToDec(get_time[4]);
+    time->month      = bcdToDec(get_time[5] & 0x1F); // Masking out century bit
+    time->year       = bcdToDec(get_time[6]);
+}
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -86,6 +136,7 @@ int _write(int file, char *ptr, int len)
 int main(void)
 {
       char buffer[100]; 
+      char buffer1[100]; 
  
   /* USER CODE BEGIN 1 */
 
@@ -114,7 +165,8 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
+  //DS3231_SetTime(0, 5, 15,44 , 2,9, 26);
+ 
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,18 +175,22 @@ int main(void)
   ST7735_FillScreen(ST7735_RED);
   while (1)
   {
+    uint32_t current_time = HAL_GetTick();
     /* USER CODE END WHILE */
     printf("Hello I am STM32 PlatformIO! %d\r\n",a++);
     
     //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     char *stm = "STM32F4";
-    snprintf(buffer, sizeof(buffer),"%d",a);
+     DS3231_GetTime(&myTime);
+    snprintf(buffer, sizeof(buffer),"%d:%d:%d" , myTime.hours, myTime.minutes, myTime.seconds);
+     snprintf(buffer1, sizeof(buffer1),"%d-%d-%d", myTime.dayofmonth,myTime.month,myTime.year);
     // Set cursor and write string to local buffer
     
     ST7735_WriteString(2, 2, stm, Font_16x26, ST7735_YELLOW, ST7735_RED);
-    ST7735_WriteString(2, 30, buffer, Font_16x26, ST7735_BLUE, ST7735_GREEN);
+    ST7735_WriteString(2, 30, buffer, Font_11x18, ST7735_BLUE, ST7735_GREEN);
+    ST7735_WriteString(2, 52, buffer1, Font_11x18, ST7735_GREEN, ST7735_BLUE);
 
-    HAL_Delay(1000);
+    HAL_Delay(1000- (HAL_GetTick()-current_time));
 
     /* USER CODE BEGIN 3 */
   }

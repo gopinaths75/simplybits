@@ -52,6 +52,8 @@ I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
 
+TIM_HandleTypeDef htim1;
+
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
@@ -68,6 +70,8 @@ typedef struct {
 RTC_Time myTime;
 #define DS3231_ADDRESS 0xD0
 
+#define DHT22_GPIO_Port GPIOA
+#define DHT22_Pin GPIO_PIN_1
 
 uint8_t decToBcd(uint8_t val) {
   return ( (val/10*16) + (val%10) );
@@ -114,18 +118,128 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char *ptr, int len)
-{
-    /* Transmit the buffer over USART1 with a generous 100ms timeout per block */
-    HAL_UART_Transmit(&huart1, (uint8_t *)ptr, len, 100);
-    return len;
+// int _write(int file, char *ptr, int len)
+// {
+//     /* Transmit the buffer over USART1 with a generous 100ms timeout per block */
+//     HAL_UART_Transmit(&huart1, (uint8_t *)ptr, len, 100);
+//     return len;
+// }
+
+// For Temp and Humid Sensor
+
+void delay_us(uint16_t us) {
+    __HAL_TIM_SET_COUNTER(&htim1, 0);
+    while (__HAL_TIM_GET_COUNTER(&htim1) < us);
 }
+void Set_Pin_Output (GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD; // Open drain allows easier line release
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+}
+
+void Set_Pin_Input (GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin) {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+}
+
+uint8_t DHT22_Start(void) {
+    uint8_t response = 0;
+    Set_Pin_Output(DHT22_GPIO_Port, DHT22_Pin);
+    // 1. MCU pulls the data line low for 18 milliseconds
+    HAL_GPIO_WritePin(DHT22_GPIO_Port, DHT22_Pin, GPIO_PIN_RESET);
+    HAL_Delay(18); 
+    
+    // 2. MCU pulls high / releases the bus for 30 microseconds
+    HAL_GPIO_WritePin(DHT22_GPIO_Port, DHT22_Pin, GPIO_PIN_SET);
+    delay_us(30);
+    
+    Set_Pin_Input(DHT22_GPIO_Port, DHT22_Pin);
+    // 3. Check if DHT22 response is low (80us pulse start)
+    if (!(HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin))) {
+        delay_us(80);
+        
+        // 4. Check if DHT22 response goes high (80us pulse high)
+        if ((HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin))) {
+            response = 1; // Handshake successful
+        }
+        else response = -1;
+    }
+    
+    // Wait for the high response pulse to finish before reading bits
+    uint32_t timeout = 0;
+    while ((HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin)) && timeout < 100) {
+        delay_us(1);
+        timeout++;
+    }
+    
+    return response;
+}
+
+uint8_t DHT22_Read_Byte(void) {
+    uint8_t i, result = 0;
+    Set_Pin_Input(DHT22_GPIO_Port, DHT22_Pin);
+    for (i = 0; i < 8; i++) {
+        // Wait for the 50us LOW period to pass
+        while (!(HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin))); 
+        
+        // Line is now HIGH. Wait 40us to sample the bit duration
+        delay_us(40); 
+        
+        if (!(HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin))) {
+            result &= ~(1 << (7 - i));   // If line is LOW now, it was a '0' bit
+        } else {
+            result |= (1 << (7 - i));    // If line is still HIGH, it's a '1' bit
+            while ((HAL_GPIO_ReadPin(DHT22_GPIO_Port, DHT22_Pin))); // Wait out the rest of the '1' bit
+        }
+    }
+    return result;
+}
+
+uint8_t DHT22_Read_Data(float *Temperature, float *Humidity) {
+    uint8_t Rh_byte1, Rh_byte2, Temp_byte1, Temp_byte2, CheckSum;
+    uint16_t SUM, RH, TEMP;
+
+    if (DHT22_Start()) {
+        Rh_byte1  = DHT22_Read_Byte();
+        Rh_byte2  = DHT22_Read_Byte();
+        Temp_byte1 = DHT22_Read_Byte();
+        Temp_byte2 = DHT22_Read_Byte();
+        CheckSum  = DHT22_Read_Byte();
+        
+        SUM = Rh_byte1 + Rh_byte2 + Temp_byte1 + Temp_byte2;
+        
+        if (CheckSum == (SUM & 0xFF)) {
+            RH = (Rh_byte1 << 8) | Rh_byte2;
+            TEMP = (Temp_byte1 << 8) | Temp_byte2;
+            
+            *Humidity = (float)RH / 10.0;
+            
+            // Handle negative temperature values (MSB of Temp_byte1 is sign bit)
+            if (TEMP & 0x8000) {
+                *Temperature = (float)(TEMP & 0x7FFF) / -10.0;
+            } else {
+                *Temperature = (float)TEMP / 10.0;
+            }
+            return 1; // Success
+        }
+    }
+    return 0; // Failure/Timeout
+}
+
+// for Temp and Humid sensor
 
 /* USER CODE END 0 */
 
@@ -136,8 +250,10 @@ int _write(int file, char *ptr, int len)
 int main(void)
 {
       char buffer[100]; 
-      char buffer1[100]; 
- 
+      char buffer1[100];
+      char buffer2[100]; 
+      char buffer3[100]; 
+      char buffer4[100]; 
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -164,38 +280,57 @@ int main(void)
   ST7735_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   //DS3231_SetTime(0, 5, 15,44 , 2,9, 26);
- 
+  HAL_TIM_Base_Start(&htim1); // Start microsecond reference timer
+  HAL_Delay(2000); 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   int a=1;
   ST7735_FillScreen(ST7735_RED);
+  float temperature = 0.0f;
+  float humidity = 0.0f;
+  uint8_t success = 0;
   while (1)
   {
-    uint32_t current_time = HAL_GetTick();
-    /* USER CODE END WHILE */
-    printf("Hello I am STM32 PlatformIO! %d\r\n",a++);
-    
-    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    success = DHT22_Read_Data(&temperature, &humidity);
+    // HAL_Delay(1000);
+     uint32_t current_time = HAL_GetTick();
+    // /* USER CODE END WHILE */
+    // printf("Hello I am STM32 PlatformIO! %d\r\n",a++);
+     int temp_whole = (int)temperature;
+        int temp_dec = (int)((temperature - temp_whole) * 10);
+        if (temp_dec < 0) temp_dec = -temp_dec; // Handle negative decimals
+
+        int hum_whole = (int)humidity;
+        int hum_dec = (int)((humidity - hum_whole) * 10);
+
+    // //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     char *stm = "STM32F4";
-     DS3231_GetTime(&myTime);
+    DS3231_GetTime(&myTime);
     snprintf(buffer, sizeof(buffer),"%d:%d:%d" , myTime.hours, myTime.minutes, myTime.seconds);
-     snprintf(buffer1, sizeof(buffer1),"%d-%d-%d", myTime.dayofmonth,myTime.month,myTime.year);
+    snprintf(buffer1, sizeof(buffer1),"%d-%d-%d", myTime.dayofmonth,myTime.month,myTime.year);
+    snprintf(buffer3, sizeof(buffer3),"Temp:%d.%dC ",temp_whole, temp_dec);
+    snprintf(buffer4, sizeof(buffer4),"Humy:%d.%d%%", hum_whole, hum_dec);
+    snprintf(buffer2, sizeof(buffer2),"Success : %d",success);
     // Set cursor and write string to local buffer
-    
     ST7735_WriteString(2, 2, stm, Font_16x26, ST7735_YELLOW, ST7735_RED);
     ST7735_WriteString(2, 30, buffer, Font_11x18, ST7735_BLUE, ST7735_GREEN);
     ST7735_WriteString(2, 52, buffer1, Font_11x18, ST7735_GREEN, ST7735_BLUE);
-
+    ST7735_WriteString(2, 75, buffer2, Font_11x18, ST7735_GREEN, ST7735_BLUE);
+    ST7735_WriteString(2, 95, buffer3, Font_11x18, ST7735_GREEN, ST7735_BLUE);
+    ST7735_WriteString(2, 115, buffer4, Font_11x18, ST7735_GREEN, ST7735_BLUE);
     HAL_Delay(1000- (HAL_GetTick()-current_time));
 
     /* USER CODE BEGIN 3 */
   }
+
   /* USER CODE END 3 */
 }
+
 
 /**
   * @brief System Clock Configuration
@@ -214,10 +349,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 25;
+  RCC_OscInitStruct.PLL.PLLN = 192;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -227,12 +366,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -311,6 +450,52 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 95;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
   * @brief USART1 Initialization Function
   * @param None
   * @retval None
@@ -357,24 +542,28 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Temp_Hum_GPIO_Port, Temp_Hum_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, LCD_RST_Pin|LCD_RS_Pin|LCD_CS_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  /*Configure GPIO pin : LED_Pin */
+  GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LCD_RST_Pin LCD_RS_Pin LCD_CS_Pin */
-  GPIO_InitStruct.Pin = LCD_RST_Pin|LCD_RS_Pin|LCD_CS_Pin;
+  /*Configure GPIO pins : Temp_Hum_Pin LCD_RST_Pin LCD_RS_Pin LCD_CS_Pin */
+  GPIO_InitStruct.Pin = Temp_Hum_Pin|LCD_RST_Pin|LCD_RS_Pin|LCD_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

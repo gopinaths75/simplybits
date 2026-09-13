@@ -192,22 +192,23 @@ static void ST7735_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint
     }
 }
 
-/*
-Simpler (and probably slower) implementation:
 
-static void ST7735_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color) {
-    uint32_t i, b, j;
 
-    for(i = 0; i < font.height; i++) {
-        b = font.data[(ch - 32) * font.height + i];
-        for(j = 0; j < font.width; j++) {
-            if((b << j) & 0x8000)  {
-                ST7735_DrawPixel(x + j, y + i, color);
-            } 
-        }
-    }
-}
-*/
+//Simpler (and probably slower) implementation:
+
+// static void ST7735_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color) {
+//     uint32_t i, b, j;
+
+//     for(i = 0; i < font.height; i++) {
+//         b = font.data[(ch - 32) * font.height + i];
+//         for(j = 0; j < font.width; j++) {
+//             if((b << j) & 0x8000)  {
+//                 ST7735_DrawPixel(x + j, y + i, color);
+//             } 
+//         }
+//     }
+// }
+
 
 void ST7735_WriteString(uint16_t x, uint16_t y, const char* str, FontDef font, uint16_t color, uint16_t bgcolor) {
     ST7735_Select();
@@ -309,4 +310,56 @@ void ST7735_SetGamma(GammaDef gamma)
 	ST7735_WriteCommand(ST7735_GAMSET);
 	ST7735_WriteData((uint8_t *) &gamma, sizeof(gamma));
 	ST7735_Unselect();
+}
+
+void ST7735_WriteCharTransparent(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color) {
+    uint32_t i, b, j;
+
+    // Loop through character height
+    for (i = 0; i < font.height; i++) {
+        // Fetch the byte line from the font data
+        // (Note: Adjust this indexing depending on how your specific font library is structured)
+        b = font.data[(ch - 32) * font.height + i];
+        
+        // Loop through character width
+        for (j = 0; j < font.width; j++) {
+            // Check if the specific bit is set (1 = text color)
+            if ((b << j) & 0x8000) { 
+                ST7735_DrawPixel(x + j, y + i, color);
+            }
+            // If the bit is 0, we do absolutely nothing. 
+            // This keeps the background untouched.
+        }
+    }
+}
+
+/**
+ * @brief  Draws a full string without overwriting the background
+ * @param  x: Starting X coordinate
+ * @param  y: Starting Y coordinate
+ * @param  str: Pointer to the string array
+ * @param  font: Font structure
+ * @param  color: 16-bit RGB565 color of the text
+ */
+void ST7735_WriteStringTransparent(uint16_t x, uint16_t y, const char* str, FontDef font, uint16_t color) {
+    // Loop through the string until the null terminator
+    while (*str) {
+        // Check if the character fits on the screen width boundaries
+        if (x + font.width >= 128) {
+            x = 0;     // Wrap to the left
+            y += font.height; // Move to the next line
+            
+            // Check if we ran out of screen height boundaries
+            if (y + font.height >= 160) {
+                break; // Stop drawing if out of bounds
+            }
+        }
+        
+        // Draw the current character
+        ST7735_WriteCharTransparent(x, y, *str, font, color);
+        
+        // Move X coordinate forward for the next character
+        x += font.width;
+        str++;
+    }
 }

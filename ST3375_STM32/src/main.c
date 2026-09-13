@@ -25,7 +25,7 @@
 #include "stdio.h"
 #include "st7735.h"
 #include "fonts.h"
-
+#include "image.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -290,40 +290,41 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   int a=1;
-  ST7735_FillScreen(ST7735_RED);
+  ST7735_DrawImage(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, image_data);
   float temperature = 0.0f;
   float humidity = 0.0f;
   uint8_t success = 0;
   while (1)
   {
     success = DHT22_Read_Data(&temperature, &humidity);
-    // HAL_Delay(1000);
-     uint32_t current_time = HAL_GetTick();
+    HAL_Delay(1000);
+     //ST7735_DrawImage(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, image_data);
+    uint32_t current_time = HAL_GetTick();
     // /* USER CODE END WHILE */
     // printf("Hello I am STM32 PlatformIO! %d\r\n",a++);
-     int temp_whole = (int)temperature;
-        int temp_dec = (int)((temperature - temp_whole) * 10);
-        if (temp_dec < 0) temp_dec = -temp_dec; // Handle negative decimals
+    int temp_whole = (int)temperature;
+    int temp_dec = (int)((temperature - temp_whole) * 10);
+    if (temp_dec < 0) temp_dec = -temp_dec; // Handle negative decimals
 
-        int hum_whole = (int)humidity;
-        int hum_dec = (int)((humidity - hum_whole) * 10);
+    int hum_whole = (int)humidity;
+    int hum_dec = (int)((humidity - hum_whole) * 10);
 
     // //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     char *stm = "STM32F4";
-    DS3231_GetTime(&myTime);
-    snprintf(buffer, sizeof(buffer),"%d:%d:%d" , myTime.hours, myTime.minutes, myTime.seconds);
-    snprintf(buffer1, sizeof(buffer1),"%d-%d-%d", myTime.dayofmonth,myTime.month,myTime.year);
+    //DS3231_GetTime(&myTime);
+    //snprintf(buffer, sizeof(buffer),"%d:%d:%d" , myTime.hours, myTime.minutes, myTime.seconds);
+    //snprintf(buffer1, sizeof(buffer1),"%d-%d-%d", myTime.dayofmonth,myTime.month,myTime.year);
     snprintf(buffer3, sizeof(buffer3),"Temp:%d.%dC ",temp_whole, temp_dec);
     snprintf(buffer4, sizeof(buffer4),"Humy:%d.%d%%", hum_whole, hum_dec);
-    snprintf(buffer2, sizeof(buffer2),"Success : %d",success);
+    //snprintf(buffer2, sizeof(buffer2),"Success : %d",success);
     // Set cursor and write string to local buffer
-    ST7735_WriteString(2, 2, stm, Font_16x26, ST7735_YELLOW, ST7735_RED);
-    ST7735_WriteString(2, 30, buffer, Font_11x18, ST7735_BLUE, ST7735_GREEN);
-    ST7735_WriteString(2, 52, buffer1, Font_11x18, ST7735_GREEN, ST7735_BLUE);
-    ST7735_WriteString(2, 75, buffer2, Font_11x18, ST7735_GREEN, ST7735_BLUE);
-    ST7735_WriteString(2, 95, buffer3, Font_11x18, ST7735_GREEN, ST7735_BLUE);
-    ST7735_WriteString(2, 115, buffer4, Font_11x18, ST7735_GREEN, ST7735_BLUE);
-    HAL_Delay(1000- (HAL_GetTick()-current_time));
+    ST7735_WriteStringTransparent(2, 2, stm, Font_16x26, ST7735_WHITE);
+    //ST7735_WriteString(2, 30, buffer, Font_11x18, ST7735_BLUE, ST7735_GREEN);
+    //ST7735_WriteString(2, 52, buffer1, Font_11x18, ST7735_GREEN, ST7735_BLUE);
+    //ST7735_WriteString(2, 32, buffer2, Font_11x18, ST7735_GREEN, ST7735_BLUE);
+    ST7735_WriteStringTransparent(2, 32, buffer3, Font_11x18, ST7735_WHITE);
+    ST7735_WriteStringTransparent(2, 62, buffer4, Font_11x18, ST7735_GREEN);
+     HAL_Delay(1000- (HAL_GetTick()-current_time));
 
     /* USER CODE BEGIN 3 */
   }

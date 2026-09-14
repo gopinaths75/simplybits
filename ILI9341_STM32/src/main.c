@@ -28,6 +28,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "testimg.h"
+#include "lion.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -299,8 +300,9 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   int a=1;
-   ILI9341_FillScreen(ILI9341_BLACK);
-  ILI9341_DrawImage((ILI9341_WIDTH - 128) /2, (ILI9341_HEIGHT - 160) / 2, 128, 160, (const uint16_t*)image_data);
+   //ILI9341_FillScreen(ILI9341_BLACK);
+  ILI9341_DrawImage((ILI9341_WIDTH - 240) /2, (ILI9341_HEIGHT - 320) / 2, 240, 320, (const uint16_t*)lion);
+  //ILI9341_Scroll(0, 298, ILI9341_WIDTH, 22);;
   float temperature = 0.0f;
   float humidity = 0.0f;
   uint8_t success = 0;
@@ -395,9 +397,9 @@ int main(void)
     // ILI9341_FillScreen(ILI9341_YELLOW);
     // ILI9341_WriteString(0, 0, "YELLOW", Font_11x18, ILI9341_BLACK, ILI9341_YELLOW);
     // HAL_Delay(500);
-
-    ILI9341_WriteString(2, 2, buffer3, Font_11x18, ILI9341_WHITE, ILI9341_BLACK);
-    ILI9341_WriteString(2, 32, buffer4, Font_11x18, ILI9341_WHITE, ILI9341_BLACK);
+    ILI9341_FillRectangle(0, 298, ILI9341_WIDTH, 22, ILI9341_BLACK);
+    ILI9341_WriteString(2, 300, buffer3, Font_11x18, ILI9341_GREEN, ILI9341_BLACK);
+    ILI9341_WriteString(120, 300, buffer4, Font_11x18, ILI9341_RED, ILI9341_BLACK);
     HAL_Delay(1000);
 
     // ILI9341_FillScreen(ILI9341_BLACK);

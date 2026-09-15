@@ -29,6 +29,7 @@
 #include "image.h"
 #include "testimg.h"
 #include "lion.h"
+#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -291,6 +292,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_TIM1_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
   //DS3231_SetTime(0, 5, 15,44 , 2,9, 26);
   HAL_TIM_Base_Start(&htim1); // Start microsecond reference timer
@@ -301,7 +303,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   int a=1;
    //ILI9341_FillScreen(ILI9341_BLACK);
-  ILI9341_DrawImage((ILI9341_WIDTH - 240) /2, (ILI9341_HEIGHT - 320) / 2, 240, 320, (const uint16_t*)lion);
+  ILI9341_DrawImage((ILI9341_WIDTH - 240)/2, (ILI9341_HEIGHT - 320)/2, 240, 320, (const uint16_t*)lion);
+  ILI9341_FillRectangle(0, 298, ILI9341_WIDTH, 22, ILI9341_BLACK);
   //ILI9341_Scroll(0, 298, ILI9341_WIDTH, 22);;
   float temperature = 0.0f;
   float humidity = 0.0f;
@@ -397,7 +400,7 @@ int main(void)
     // ILI9341_FillScreen(ILI9341_YELLOW);
     // ILI9341_WriteString(0, 0, "YELLOW", Font_11x18, ILI9341_BLACK, ILI9341_YELLOW);
     // HAL_Delay(500);
-    ILI9341_FillRectangle(0, 298, ILI9341_WIDTH, 22, ILI9341_BLACK);
+    
     ILI9341_WriteString(2, 300, buffer3, Font_11x18, ILI9341_GREEN, ILI9341_BLACK);
     ILI9341_WriteString(120, 300, buffer4, Font_11x18, ILI9341_RED, ILI9341_BLACK);
     HAL_Delay(1000);
@@ -655,10 +658,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Temp_Hum_GPIO_Port, Temp_Hum_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, SD_CS_Pin|TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Temp_Hum_GPIO_Port, Temp_Hum_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
@@ -667,8 +670,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Temp_Hum_Pin TFT_CS_Pin TFT_RST_Pin TFT_DC_Pin */
-  GPIO_InitStruct.Pin = Temp_Hum_Pin|TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin;
+  /*Configure GPIO pins : SD_CS_Pin Temp_Hum_Pin TFT_CS_Pin TFT_RST_Pin
+                           TFT_DC_Pin */
+  GPIO_InitStruct.Pin = SD_CS_Pin|Temp_Hum_Pin|TFT_CS_Pin|TFT_RST_Pin
+                          |TFT_DC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

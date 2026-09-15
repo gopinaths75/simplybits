@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -101,6 +102,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   MX_TIM1_Init();
+  MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -334,10 +336,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Temp_Hum_GPIO_Port, Temp_Hum_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, SD_CS_Pin|TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Temp_Hum_GPIO_Port, Temp_Hum_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
@@ -346,8 +348,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Temp_Hum_Pin TFT_CS_Pin TFT_RST_Pin TFT_DC_Pin */
-  GPIO_InitStruct.Pin = Temp_Hum_Pin|TFT_CS_Pin|TFT_RST_Pin|TFT_DC_Pin;
+  /*Configure GPIO pins : SD_CS_Pin Temp_Hum_Pin TFT_CS_Pin TFT_RST_Pin
+                           TFT_DC_Pin */
+  GPIO_InitStruct.Pin = SD_CS_Pin|Temp_Hum_Pin|TFT_CS_Pin|TFT_RST_Pin
+                          |TFT_DC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
